@@ -2,8 +2,10 @@
 
 import sys
 import subprocess
+import urllib
 import re
 
+#START: local functions
 def usage():
   print >>sys.stderr, '%s: <.pcap> [tshark additional options] "wireshark display filter"' % sys.argv[0]
   sys.exit(1)
@@ -11,6 +13,32 @@ def usage():
 def usage1():
   print >>sys.stderr, '%s: <.pcap> [tshark additional options] "wireshark display filter: assuming "wlan""' % sys.argv[0]
 
+def getSequenceDiagram( text, outputFile, style = 'default' ):
+    request = {}
+    request["message"] = text
+    request["style"] = style
+    request["apiVersion"] = "1"
+
+    url = urllib.urlencode(request)
+
+    f = urllib.urlopen("http://www.websequencediagrams.com/", url)
+    line = f.readline()
+    f.close()
+
+    expr = re.compile("(\?(img|pdf|png|svg)=[a-zA-Z0-9]+)")
+    m = expr.search(line)
+
+    if m == None:
+        print "Invalid response from server."
+        return False
+
+    urllib.urlretrieve("http://www.websequencediagrams.com/" + m.group(0),
+            outputFile )
+    return True
+
+#END: local functions
+
+#START: Main code
 
 n = len(sys.argv)
 if n < 2:
@@ -25,6 +53,10 @@ dfilter = sys.argv[-1]
 
 #print >>sys.stderr, '%s ' % sys.argv[0]
 #print >>sys.stderr, '%s ' % sys.argv[1]
+# Information is extracted by executing tshark twice
+# one instance of tshark prints the fields and another prints the info (both cannot be clubbed)
+
+# tshark command to print the fields
 tshark_cmd = [ 'tshark']
 tshark_cmd.append('-r')
 tshark_cmd.append(sys.argv[1])
@@ -33,18 +65,32 @@ if n < 3:
 else:
   tshark_cmd.append(sys.argv[2])
 
-#tshark_cmd.append('-o')
-#tshark_cmd.append('column.format:"Info","%i"')
+# tshark command to print the decoded info
+tshark_cmd_info = [ 'tshark']
+tshark_cmd_info.append('-r')
+tshark_cmd_info.append(sys.argv[1])
+if n < 3:
+  tshark_cmd_info.append('wlan')
+else:
+  tshark_cmd_info.append(sys.argv[2])
 
 tshark_cmd.append('-Tfields')
 tshark_cmd.append('-ewlan.fc.type')
 tshark_cmd.append('-ewlan.fc.type_subtype')
 tshark_cmd.append('-ewlan.addr')
 tshark_cmd.append('-ewlan.ra')
+
+tshark_cmd_info.append('-o')
+tshark_cmd_info.append('column.format:"Info","%i","Protocol","%p"')
 print >>sys.stderr, '%s' % tshark_cmd
-# start tshark subprocess and prepare a pipe to which it will write stdout
+print >>sys.stderr, '%s' % tshark_cmd_info
+
+# start tshark subprocesses and prepare a pipe to which it will write stdout
 shark = subprocess.Popen(tshark_cmd, stdout=subprocess.PIPE)
 sharkout = shark.stdout
+
+shark_info = subprocess.Popen(tshark_cmd_info, stdout=subprocess.PIPE)
+sharkout_info = shark_info.stdout
 
 frame_names = {
 '0x00': 'mgmt-Association request', '0x01': 'mgmt-Association response', 
@@ -70,6 +116,7 @@ messages = []
 
 while True:
   line = sharkout.readline()
+  line_info = sharkout_info.readline()
   # eof encountered
   if len(line) == 0:
     break
@@ -81,14 +128,23 @@ while True:
 #  regex2 = re.compile('^(.+) +(.+) +(.+) -> (.+) +(.+) +(\d+) +(.*?)$')
   regex = re.compile('^(.+)\t+(.+)\t+(.+),(.+)\t$')
   regex2 = re.compile('^(.+)\t+(.+)\t\t+(.+)$')
-
+  regex_info =re.compile('^(.+) +(.+)$')
   ret = regex.match(line)
+  ret_info = regex_info.match(line_info)
   if ret != None:
     msg = {}
     msg['sub_type'] = ret.group(2)
     msg['msg'] = frame_names[msg['sub_type']]    
     msg['dst'] = ret.group(3)
     msg['src'] = ret.group(4)
+    msg['info'] = ""
+    if ret_info != None:
+      if ret_info.group(2) != "802.11":
+        msg['info'] = '%s(%s)' %(ret_info.group(2), ret_info.group(1))
+      else:
+        msg['info'] = '%s' %ret_info.group(1)
+    if len(msg ['info']) > 46:
+      msg['info'] = (msg['info'][:44]+'??')
     messages.append(msg)
 #    print >>sys.stderr, "%s" % msg
   else:
@@ -99,6 +155,7 @@ while True:
       msg['msg'] = frame_names[msg['sub_type']]    
       msg['dst'] = ret.group(3)
       msg['src'] = 'ff:ff:ff:ff:ff:ff'
+      msg['info'] = ""
       messages.append(msg)
 #      print >>sys.stderr, "%s" % msg
     else:
@@ -111,8 +168,8 @@ if shark.returncode != 0:
   print >>sys.stderr, "tshark returned error code %d" % shark.returncode
   sys.exit(1)
 
-# list of entity
-# contains IP addresses used IP datagrams exchanged in this capture
+# list of entities
+# contains MAC addresses
 entities = []
 for msg in messages:
   if msg['src'] not in entities:
@@ -123,13 +180,29 @@ for msg in messages:
 # print msc generated file on stdout
 # declare participants
 line = ''
+msc_text = ''
 for i in range(0, len(entities)):
   line = 'participant \"%s\" as u%d' % (entities[i],i)
+  msc_text += '%s\n' % line
   print("%s" % line)
 
 # add messages
+line = ''
 for msg in messages:
   src = entities.index(msg['src'])
   dst = entities.index(msg['dst'])
-  print("u%d->u%d:\"%s\"" % (src, dst, msg['msg']))
+  if msg['info'] == "":
+    msg_text = '%s' % msg['msg']
+  else:
+    msg_text = '%s' % msg['info']
+  line = 'u%d->u%d:\"%s\"' % (src, dst, msg_text)
+#  print("u%d->u%d:\"%s\"" % (src, dst, msg_text))
+  print("%s" % line)
+  msc_text += '%s\n' % line
+
+style = "qsd"
+pngFile = "out.png"
+getSequenceDiagram( msc_text, pngFile, style )
+#End: Main code
+
 
