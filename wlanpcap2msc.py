@@ -146,6 +146,7 @@ while True:
 #Number type_subtype wlan.addr(dst,src)
 #  regex = re.compile('^(.+)\t+(.+)\t+(.+),(.+)\t+(.+)\t+(.+)\t$')
   regex_da_sa_bssid = re.compile('^(.+);+(.+);+(.+);+(.+);+(.+);+(.+);(.+);;$')
+  regex_da_sa_bssid_ra_ta = re.compile('^(.+);+(.+);+(.+);+(.+);+(.+);+(.+);(.+);(.+);(.+)$')
   regex_ra_ta = re.compile('^(.+);+(.+);+(.+);+(.+);;;;(.+);(.+)$')
   regex_ra = re.compile('^(.+);+(.+);+(.+);+(.+);;;;(.+);$')
 #1	0x1d		00:0c:41:82:b2:55
@@ -153,7 +154,11 @@ while True:
 #  regex_ra = re.compile('^(.+)\t+(.+)\t\t\t\t+(.+)$')
   regex_info =re.compile('^(.+) +(.+)$')
   ret = regex_da_sa_bssid.match(line)
+  ret_ra_ta = regex_da_sa_bssid_ra_ta.match(line)
   ret_info = regex_info.match(line_info)
+  if ret == None:
+    # Some versions of tshark return ra and ta
+    ret = regex_da_sa_bssid_ra_ta.match(line);
   if ret != None:
     msg = {}
     msg['sub_type'] = ret.group(2)
@@ -170,7 +175,8 @@ while True:
     else:
       msg['dst'] = ret.group(5)
 
-    print("**** %s:%s:%s:%s:%s:%s" % (ret.group(1),ret.group(3),ret.group(4),ret.group(5),ret.group(6),ret.group(7)))
+    if debug == 1:
+	  print("**** %s:%s:%s:%s:%s:%s" % (ret.group(1),ret.group(3),ret.group(4),ret.group(5),ret.group(6),ret.group(7)))
 
     msg['number'] = ret.group(1)
     msg['info'] = ""
