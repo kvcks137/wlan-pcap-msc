@@ -144,11 +144,19 @@ while True:
 
 #0	0x08	ff:ff:ff:ff:ff:ff,00:0c:41:82:b2:55	
 #Number type_subtype wlan.addr(dst,src)
-#  regex = re.compile('^(.+)\t+(.+)\t+(.+),(.+)\t+(.+)\t+(.+)\t$')
+  
   regex_da_sa_bssid = re.compile('^(.+);+(.+);+(.+);+(.+);+(.+);+(.+);(.+);;$')
   regex_da_sa_bssid_ra_ta = re.compile('^(.+);+(.+);+(.+);+(.+);+(.+);+(.+);(.+);(.+);(.+)$')
-  regex_ra_ta = re.compile('^(.+);+(.+);+(.+);+(.+);;;;(.+);(.+)$')
-  regex_ra = re.compile('^(.+);+(.+);+(.+);+(.+);;;;(.+);$')
+  
+  if os.name=="nt":
+    regex_ra_ta = re.compile('^(.+);+(.+);+(.+);+(.+);;;;(.+);(.+)\r$')
+  else:
+    regex_ra_ta = re.compile('^(.+);+(.+);+(.+);+(.+);;;;(.+);(.+)\r$')
+  
+  if os.name=="nt":
+    regex_ra = re.compile('^(.+);+(.+);+(.+);+(.+);;;;(.+);\s$')
+  else:
+    regex_ra = re.compile('^(.+);+(.+);+(.+);+(.+);;;;(.+);$')
 #1	0x1d		00:0c:41:82:b2:55
 #Number type_subtype wlan.addr(receiver)
 #  regex_ra = re.compile('^(.+)\t+(.+)\t\t\t\t+(.+)$')
