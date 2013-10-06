@@ -160,7 +160,11 @@ while True:
 #1	0x1d		00:0c:41:82:b2:55
 #Number type_subtype wlan.addr(receiver)
 #  regex_ra = re.compile('^(.+)\t+(.+)\t\t\t\t+(.+)$')
-  regex_info =re.compile('^(.+) +(.+)$')
+  if os.name=="nt":
+    regex_info =re.compile('^(.+) +(.+)\r$')
+  else:
+    regex_info =re.compile('^(.+) +(.+)$')
+
   ret = regex_da_sa_bssid.match(line)
   ret_ra_ta = regex_da_sa_bssid_ra_ta.match(line)
   ret_info = regex_info.match(line_info)
